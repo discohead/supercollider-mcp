@@ -5,7 +5,7 @@
     "zod": "^3.24.2"
   },
   "name": "@makotyo/mcp-supercollider",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "src/server.ts",
   "type": "module",
   "bin": {
@@ -18,9 +18,12 @@
   "files": [
     "build"
   ],
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "modelcontextprotocol",
+    "supercollider"
+  ],
+  "author": "Makoto Shinohara",
+  "license": "MIT",
   "description": "",
   "devDependencies": {
     "@types/node": "^22.14.1",
