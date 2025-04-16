@@ -87,7 +87,8 @@ export const server = new McpServer({
 
 server.tool(
   "synth-execute",
-  "SynthDefのコードを生成し、そのコードを実行して音を出します。",
+  `SynthDefのコードを生成し、そのコードを実行して音を出します。
+  コードは{}でくくるようにしてください。`,
   {
     synth: z.object({
       name: z.string().describe("シンセの名前"),
