@@ -6,10 +6,12 @@ const sc = supercolliderjs;
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { registerVibeTools } from "./tools/vibeTools.js";
 
 interface SCServer {
   synthDef: (name: string, code: string) => Promise<any>;
   synth: (def: any, options?: any) => Promise<any>;
+  interpret: (code: string) => Promise<any>;
   quit: () => void;
 }
 
@@ -205,6 +207,18 @@ server.tool(
     }
   }
 );
+
+// Register vibe tools for techno composition
+registerVibeTools(server, {
+  synthDef: async (name: string, code: string) => {
+    const scServer = await initServer();
+    return scServer.synthDef(name, code);
+  },
+  interpret: async (code: string) => {
+    const scServer = await initServer();
+    return scServer.interpret(code);
+  }
+});
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

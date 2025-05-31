@@ -19,6 +19,10 @@ This is a Model Context Protocol (MCP) server that integrates SuperCollider audi
 3. **Available Tools**:
    - `synth-execute`: Executes a single SynthDef with specified code and duration
    - `multi-synth-execute`: Executes multiple SynthDefs simultaneously
+   - `techno-init`: Initialize techno environment with SynthDefs and patterns
+   - `vibe-create`: Create hypnotic techno patterns from vibe descriptions
+   - `techno-stop`: Stop all playing patterns
+   - `techno-tweak`: Adjust parameters in real-time
 
 ### Key Implementation Details
 
