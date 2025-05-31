@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerVibeTools } from "./tools/vibeTools.js";
+import { execSync } from "child_process";
 
 interface SCServer {
   synthDef: (name: string, code: string) => Promise<any>;
@@ -27,18 +28,47 @@ async function initServer(): Promise<SCServer> {
 
   serverInitPromise = (async () => {
     try {
-      console.error("Starting SuperCollider server...");
-      const server = await (sc as any).server.boot({
-        debug: false,
-        echo: false,
+      console.error("[SC] Starting SuperCollider server...");
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("SuperCollider startup timeout (30s)")), 30000);
+      });
+      
+      const bootPromise = (sc as any).server.boot({
+        debug: true,
+        echo: true,
         stderr: './supercollider-error.log'
-      }) as SCServer;
+      });
+      
+      const server = await Promise.race([bootPromise, timeoutPromise]) as SCServer;
 
-      console.error("SuperCollider server startup complete");
+      console.error("[SC] SuperCollider server startup complete");
       scServerInstance = server;
       return server;
     } catch (err) {
-      console.error("SuperCollider server startup error:", err);
+      console.error("[SC] SuperCollider server startup error:", err);
+      console.error("[SC] Error details:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
+      
+      // Check if SuperCollider is installed
+      try {
+        try {
+          execSync('which sclang', { stdio: 'ignore' });
+          console.error("[SC] SuperCollider binary found in PATH");
+        } catch {
+          // Try macOS app location
+          try {
+            execSync('ls "/Applications/SuperCollider.app/Contents/MacOS/sclang"', { stdio: 'ignore' });
+            console.error("[SC] SuperCollider found in /Applications but not in PATH");
+            console.error("[SC] Consider adding to PATH or using full path");
+          } catch {
+            console.error("[SC] SuperCollider not found in standard locations");
+          }
+        }
+      } catch {
+        console.error("[SC] ERROR: SuperCollider not found. Please install SuperCollider first.");
+      }
+      
       serverInitPromise = null;
       throw err;
     }
@@ -220,7 +250,28 @@ registerVibeTools(server, {
   }
 });
 
+// Check if SuperCollider is available before starting
+let scFound = false;
+
+try {
+  execSync('which sclang', { stdio: 'ignore' });
+  console.error("[MCP] SuperCollider found in PATH");
+  scFound = true;
+} catch {
+  // Try macOS app location
+  try {
+    execSync('ls "/Applications/SuperCollider.app/Contents/MacOS/sclang"', { stdio: 'ignore' });
+    console.error("[MCP] SuperCollider found in /Applications");
+    console.error("[MCP] Note: Consider adding SuperCollider to PATH for better performance");
+    scFound = true;
+  } catch {
+    console.error("[MCP] WARNING: SuperCollider not found");
+    console.error("[MCP] Please install SuperCollider from: https://supercollider.github.io/downloads");
+    console.error("[MCP] Some features may not work without SuperCollider");
+  }
+}
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error("supercollider MCP Server running on stdio");
+console.error("[MCP] Techno Vibe MCP Server running on stdio");
 

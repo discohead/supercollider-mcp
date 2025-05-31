@@ -12,14 +12,26 @@ export function registerVibeTools(server: any, scServer: any) {
     {},
     async () => {
       try {
+        console.error("[TECHNO] Starting techno environment initialization...");
+        
         // Load all SynthDefs
+        console.error("[TECHNO] Loading SynthDefs...");
         await scServer.synthDef("technoKick", kickDef);
+        console.error("[TECHNO] Loaded technoKick");
+        
         await scServer.synthDef("hypnoticBass", basslineDef);
+        console.error("[TECHNO] Loaded hypnoticBass");
+        
         await scServer.synthDef("hihat", hihatDef);
+        console.error("[TECHNO] Loaded hihat");
         
         // Initialize tempo
+        console.error("[TECHNO] Setting tempo...");
         const tempoCode = `TempoClock.default.tempo = 130/60;`; // 130 BPM
         await scServer.interpret(tempoCode);
+        console.error("[TECHNO] Tempo set to 130 BPM");
+        
+        console.error("[TECHNO] Initialization complete!");
         
         return {
           content: [
@@ -29,9 +41,11 @@ export function registerVibeTools(server: any, scServer: any) {
           ]
         };
       } catch (error) {
+        console.error("[TECHNO] Initialization error:", error);
         return {
           content: [
-            { type: "text", text: `Initialization error: ${error}` }
+            { type: "text", text: `Initialization error: ${error instanceof Error ? error.message : JSON.stringify(error)}` },
+            { type: "text", text: "Make sure SuperCollider is installed and accessible." }
           ]
         };
       }
