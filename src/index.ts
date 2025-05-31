@@ -268,20 +268,28 @@ try {
 
 const transport = new StdioServerTransport();
 
-// Register vibe tools for techno composition after server setup
+// Register vibe tools for techno composition 
 console.error("[MCP] Registering vibe tools...");
-registerVibeTools(server, {
-  synthDef: async (name: string, code: string) => {
-    const scServer = await initServer();
-    return scServer.synthDef(name, code);
-  },
-  interpret: async (code: string) => {
-    const scServer = await initServer();
-    return scServer.interpret(code);
-  }
-});
-console.error("[MCP] Vibe tools registered");
+try {
+  registerVibeTools(server, {
+    synthDef: async (name: string, code: string) => {
+      const scServer = await initServer();
+      return scServer.synthDef(name, code);
+    },
+    interpret: async (code: string) => {
+      const scServer = await initServer();
+      return scServer.interpret(code);
+    }
+  });
+  console.error("[MCP] Vibe tools registered successfully");
+} catch (error) {
+  console.error("[MCP] Failed to register vibe tools:", error);
+  console.error("[MCP] Continuing with basic tools only");
+}
 
+console.error("[MCP] Connecting to transport...");
 await server.connect(transport);
+console.error("[MCP] Transport connected successfully");
 console.error("[MCP] Techno Vibe MCP Server running on stdio");
+console.error("[MCP] Server ready and listening for requests");
 
