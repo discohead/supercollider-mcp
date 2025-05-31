@@ -25,18 +25,18 @@ async function initServer(): Promise<SCServer> {
 
   serverInitPromise = (async () => {
     try {
-      console.error("SuperColliderサーバーを起動中...");
+      console.error("Starting SuperCollider server...");
       const server = await (sc as any).server.boot({
         debug: false,
         echo: false,
         stderr: './supercollider-error.log'
       }) as SCServer;
 
-      console.error("SuperColliderサーバー起動完了");
+      console.error("SuperCollider server startup complete");
       scServerInstance = server;
       return server;
     } catch (err) {
-      console.error("SuperColliderサーバー起動エラー:", err);
+      console.error("SuperCollider server startup error:", err);
       serverInitPromise = null;
       throw err;
     }
@@ -68,17 +68,17 @@ async function cleanupServer() {
           require('child_process').execSync('pkill -f sclang', { stdio: 'ignore' });
         }
       } catch (killErr) {
-        console.error('sclangプロセス終了試行:', killErr);
+        console.error('Attempting to terminate sclang process:', killErr);
       }
 
-      console.error('SuperColliderサーバーを終了しました');
+      console.error('SuperCollider server terminated');
     } catch (error) {
-      console.error("サーバー終了エラー:", error);
+      console.error("Server termination error:", error);
     }
   }
 }
 
-// サーバーインスタンスの作成
+// Create server instance
 export const server = new McpServer({
   name: "SuperColliderMcpServer",
   version: "0.1.0",
@@ -87,14 +87,14 @@ export const server = new McpServer({
 
 server.tool(
   "synth-execute",
-  `SynthDefのコードを生成し、そのコードを実行して音を出します。
-  コードは{}でくくるようにしてください。`,
+  `Generates SynthDef code and executes it to produce sound.
+  Please wrap the code in curly braces {}.`,
   {
     synth: z.object({
-      name: z.string().describe("シンセの名前"),
-      code: z.string().describe("シンセのコード")
-    }).describe("再生するシンセの情報"),
-    duration: z.number().optional().describe("再生時間（ミリ秒）。デフォルトは5000（5秒）")
+      name: z.string().describe("Synth name"),
+      code: z.string().describe("Synth code")
+    }).describe("Synth information to play"),
+    duration: z.number().optional().describe("Playback duration in milliseconds. Default is 5000 (5 seconds)")
   },
   async ({ synth, duration = 5000 }) => {
     try {
@@ -103,36 +103,36 @@ server.tool(
       const def = await scServer.synthDef(synth.name, synth.code);
       await scServer.synth(def);
 
-      console.error(`シンセを${duration / 1000}秒間演奏中...`);
+      console.error(`Playing synth for ${duration / 1000} seconds...`);
       await new Promise(resolve => setTimeout(resolve, duration));
 
       await cleanupServer();
 
-      console.error('シンセの演奏完了');
+      console.error('Synth playback complete');
 
       return {
         content: [
           {
             type: "text",
-            text: `シンセ名: ${synth.name}`,
+            text: `Synth name: ${synth.name}`,
           },
           {
             type: "text",
-            text: `コード: ${synth.code}`,
+            text: `Code: ${synth.code}`,
           },
           {
             type: "text",
-            text: `再生時間: ${duration / 1000}秒`,
+            text: `Playback duration: ${duration / 1000} seconds`,
           }
         ],
       };
     } catch (error) {
-      console.error("SuperCollider実行エラー:", error);
+      console.error("SuperCollider execution error:", error);
       return {
         content: [
           {
             type: "text",
-            text: `エラーが発生しました: ${error instanceof Error ? error.message : JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
+            text: `An error occurred: ${error instanceof Error ? error.message : JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
           }
         ],
       };
@@ -142,15 +142,15 @@ server.tool(
 
 server.tool(
   "multi-synth-execute",
-  "複数のSynthDefを同時に実行します。",
+  "Execute multiple SynthDefs simultaneously.",
   {
     synths: z.array(
       z.object({
-        name: z.string().describe("シンセの名前"),
-        code: z.string().describe("シンセのコード")
+        name: z.string().describe("Synth name"),
+        code: z.string().describe("Synth code")
       })
-    ).describe("再生するシンセのリスト"),
-    duration: z.number().optional().describe("再生時間（ミリ秒）。デフォルトは10000（10秒）")
+    ).describe("List of synths to play"),
+    duration: z.number().optional().describe("Playback duration in milliseconds. Default is 10000 (10 seconds)")
   },
   async (
     { synths, duration = 10000 }:
@@ -169,36 +169,36 @@ server.tool(
 
       const loadedSynths = await Promise.all(synthPromises);
 
-      console.error(`${synths.length}個のシンセを${duration / 1000}秒間演奏中...`);
+      console.error(`Playing ${synths.length} synths for ${duration / 1000} seconds...`);
       await new Promise(resolve => setTimeout(resolve, duration));
 
       await cleanupServer();
 
-      console.error('複数シンセの演奏完了');
+      console.error('Multiple synth playback complete');
 
       return {
         content: [
           {
             type: "text",
-            text: `${synths.length}個のシンセを同時に再生しました。`,
+            text: `Played ${synths.length} synths simultaneously.`,
           },
           {
             type: "text",
-            text: `再生したシンセ: ${synths.map(s => s.name).join(', ')}`,
+            text: `Synths played: ${synths.map(s => s.name).join(', ')}`,
           },
           {
             type: "text",
-            text: `合計再生時間: ${duration / 1000}秒`,
+            text: `Total playback duration: ${duration / 1000} seconds`,
           }
         ],
       };
     } catch (error) {
-      console.error("複数シンセ実行エラー:", error);
+      console.error("Multiple synth execution error:", error);
       return {
         content: [
           {
             type: "text",
-            text: `エラーが発生しました: ${error instanceof Error ? error.message : JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
+            text: `An error occurred: ${error instanceof Error ? error.message : JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
           }
         ],
       };

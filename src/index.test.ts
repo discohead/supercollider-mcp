@@ -4,18 +4,18 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { server } from "./index.js";
  
 describe("synth-execute", () => {
-  it("サイン波が出力されるか確認", async () => {
+  it("Check if sine wave is output", async () => {
 
     const client = new Client({
       name: "test client",
       version: "0.1.0",
     });
  
-    // インメモリ通信チャネルの作成
+    // Create in-memory communication channel
     const [clientTransport, serverTransport] =
       InMemoryTransport.createLinkedPair();
       
-    // クライアントとサーバーを接続
+    // Connect client and server
     await Promise.all([
       client.connect(clientTransport),
       server.connect(serverTransport),
@@ -42,11 +42,11 @@ describe("synth-execute", () => {
       content: [
         {
           type: "text",
-          text: "シンセ名: test-synth",
+          text: "Synth name: test-synth",
         },
         {
           type: "text",
-          text: `コード: 
+          text: `Code: 
             {
                 arg freq = 440;
                 var sig = SinOsc.ar(freq);
@@ -56,7 +56,7 @@ describe("synth-execute", () => {
         },
         {
           type: "text",
-          text: "再生時間: 0.5秒",
+          text: "Playback duration: 0.5 seconds",
         },
       ],
     });
@@ -65,18 +65,18 @@ describe("synth-execute", () => {
 
 
 describe("multi-synth-execute", () => {
-    it("サイン波とノイズが出力されるか確認", async () => {
+    it("Check if sine wave and noise are output", async () => {
     
         const client = new Client({
         name: "test client",
         version: "0.1.0",
         });
      
-        // インメモリ通信チャネルの作成
+        // Create in-memory communication channel
         const [clientTransport, serverTransport] =
         InMemoryTransport.createLinkedPair();
         
-        // クライアントとサーバーを接続
+        // Connect client and server
         await Promise.all([
         client.connect(clientTransport),
         server.connect(serverTransport),
@@ -114,15 +114,15 @@ describe("multi-synth-execute", () => {
         content: [
             {
             type: "text",
-            text: "2個のシンセを同時に再生しました。"
+            text: "Played 2 synths simultaneously."
             },
             {
             type: "text",
-            text: "再生したシンセ: test-synth, noise-synth"
+            text: "Synths played: test-synth, noise-synth"
             },
             {
             type: "text",
-            text: "合計再生時間: 0.5秒"
+            text: "Total playback duration: 0.5 seconds"
             },
         ],
         });
