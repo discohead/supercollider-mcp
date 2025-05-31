@@ -1,7 +1,7 @@
 #! /usr/bin/env node
 
-import supercolliderjs from "supercolliderjs";
-const sc = supercolliderjs;
+// Import local supercolliderjs 
+import * as sc from "../supercolliderjs/packages/supercolliderjs/lib/index.js";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -13,14 +13,48 @@ import { MockSCServer } from "./mockSuperCollider.js";
 interface SCServer {
   synthDef: (name: string, code: string) => Promise<any>;
   synth: (def: any, options?: any) => Promise<any>;
+  quit: () => void;
+}
+
+interface SCLang {
   interpret: (code: string) => Promise<any>;
   quit: () => void;
 }
 
 let scServerInstance: SCServer | null = null;
+let scLangInstance: SCLang | null = null;
 let serverInitPromise: Promise<SCServer> | null = null;
+let langInitPromise: Promise<SCLang> | null = null;
 
 let activeSynths: any[] = [];
+
+async function initLang(): Promise<SCLang> {
+  if (langInitPromise) {
+    return langInitPromise;
+  }
+
+  langInitPromise = (async () => {
+    try {
+      console.error("[SC] Starting SuperCollider language...");
+      
+      const sclang = await (sc as any).lang.boot({
+        debug: false,
+        echo: false,
+        stdin: false
+      });
+      
+      console.error("[SC] SuperCollider language startup complete");
+      scLangInstance = sclang;
+      return sclang;
+    } catch (err) {
+      console.error("[SC] SuperCollider language startup error:", err);
+      langInitPromise = null;
+      throw err;
+    }
+  })();
+
+  return langInitPromise;
+}
 
 async function initServer(): Promise<SCServer> {
   if (serverInitPromise) {
@@ -43,7 +77,14 @@ async function initServer(): Promise<SCServer> {
         stdout: './supercollider-output.log',
         // Try different configuration options
         host: 'localhost',
-        port: 57110
+        port: 57110,
+        // Fix audio configuration issues
+        serverOptions: {
+          numInputBusChannels: 0,  // Disable input to avoid sample rate mismatch
+          numOutputBusChannels: 2,
+          sampleRate: 48000,
+          blockSize: 512
+        }
       });
       
       const server = await Promise.race([bootPromise, timeoutPromise]) as SCServer;
@@ -61,10 +102,10 @@ async function initServer(): Promise<SCServer> {
           execSync('which sclang', { stdio: 'ignore' });
           console.error("[SC] SuperCollider binary found in PATH");
         } catch {
-          // Try macOS app location
+          // Try macOS app location (supercolliderjs expects it in SuperCollider/ subdirectory)
           try {
-            execSync('ls "/Applications/SuperCollider.app/Contents/MacOS/sclang"', { stdio: 'ignore' });
-            console.error("[SC] SuperCollider found in /Applications but not in PATH");
+            execSync('ls "/Applications/SuperCollider/SuperCollider.app/Contents/MacOS/sclang"', { stdio: 'ignore' });
+            console.error("[SC] SuperCollider found in /Applications/SuperCollider but not in PATH");
             console.error("[SC] Consider adding to PATH or using full path");
           } catch {
             console.error("[SC] SuperCollider not found in standard locations");
@@ -94,9 +135,21 @@ async function loadAndPlaySynth(scServer: SCServer, synthName: string, synthCode
 }
 
 async function cleanupServer() {
+  // Cleanup language instance
+  if (scLangInstance) {
+    try {
+      scLangInstance.quit();
+      scLangInstance = null;
+      langInitPromise = null;
+    } catch (error) {
+      console.error("Language termination error:", error);
+    }
+  }
+
+  // Cleanup server instance  
   if (scServerInstance) {
     try {
-      await scServerInstance.quit();
+      scServerInstance.quit();
 
       scServerInstance = null;
       serverInitPromise = null;
@@ -104,9 +157,9 @@ async function cleanupServer() {
 
       try {
         if (process.platform === 'win32') {
-          require('child_process').execSync('taskkill /F /IM sclang.exe', { stdio: 'ignore' });
+          execSync('taskkill /F /IM sclang.exe', { stdio: 'ignore' });
         } else {
-          require('child_process').execSync('pkill -f sclang', { stdio: 'ignore' });
+          execSync('pkill -f sclang', { stdio: 'ignore' });
         }
       } catch (killErr) {
         console.error('Attempting to terminate sclang process:', killErr);
@@ -222,7 +275,7 @@ server.tool(
         synthPromises.push(loadAndPlaySynth(scServer, synth.name, synth.code));
       }
 
-      const loadedSynths = await Promise.all(synthPromises);
+      await Promise.all(synthPromises);
 
       console.error(`Playing ${synths.length} synths for ${duration / 1000} seconds...`);
       await new Promise(resolve => setTimeout(resolve, duration));
@@ -266,10 +319,10 @@ try {
   execSync('which sclang', { stdio: 'ignore' });
   console.error("[MCP] SuperCollider found in PATH");
 } catch {
-  // Try macOS app location
+  // Try macOS app location (supercolliderjs expects it in SuperCollider/ subdirectory)
   try {
-    execSync('ls "/Applications/SuperCollider.app/Contents/MacOS/sclang"', { stdio: 'ignore' });
-    console.error("[MCP] SuperCollider found in /Applications");
+    execSync('ls "/Applications/SuperCollider/SuperCollider.app/Contents/MacOS/sclang"', { stdio: 'ignore' });
+    console.error("[MCP] SuperCollider found in /Applications/SuperCollider");
     console.error("[MCP] Note: Consider adding SuperCollider to PATH for better performance");
   } catch {
     console.error("[MCP] WARNING: SuperCollider not found");
@@ -289,8 +342,8 @@ try {
       return scServer.synthDef(name, code);
     },
     interpret: async (code: string) => {
-      const scServer = await initServer();
-      return scServer.interpret(code);
+      const sclang = await initLang();
+      return sclang.interpret(code);
     }
   });
   console.error("[MCP] Vibe tools registered successfully");

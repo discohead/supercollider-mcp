@@ -25,11 +25,16 @@ export function registerVibeTools(server: any, scServer: any) {
         await scServer.synthDef("hihat", hihatDef);
         console.error("[TECHNO] Loaded hihat");
         
-        // Initialize tempo
+        // Initialize tempo (using simpler syntax)
         console.error("[TECHNO] Setting tempo...");
-        const tempoCode = `TempoClock.default.tempo = 130/60;`; // 130 BPM
-        await scServer.interpret(tempoCode);
-        console.error("[TECHNO] Tempo set to 130 BPM");
+        try {
+          const tempoCode = `TempoClock.default.tempo_(130/60)`; // 130 BPM
+          await scServer.interpret(tempoCode);
+          console.error("[TECHNO] Tempo set to 130 BPM");
+        } catch (tempoError) {
+          console.error("[TECHNO] Tempo setting failed, continuing without it:", tempoError);
+          console.error("[TECHNO] Tempo will be handled by individual patterns");
+        }
         
         console.error("[TECHNO] Initialization complete!");
         
@@ -67,29 +72,57 @@ export function registerVibeTools(server: any, scServer: any) {
         const interpretation = interpretVibe(vibe);
         const params = vibeToParams(interpretation);
         
-        // Build the composition based on interpretation
-        let composition = "";
+        // Create a composite synth based on interpretation
+        const vibeName = vibe.replace(/\s+/g, '_').toLowerCase();
         
-        // Always start with kick
-        composition += patterns.hypnoticKick + ".play;\\n";
+        // Build a synth that combines the elements
+        let synthCode = `{
+          var tempo = 130/60 * 4; // Convert to quarter notes per second
+          var kickGate, bassGate, hihatGate;
+          var kick, bass, hihat, mix;
+          
+          // Tempo-synced triggers
+          kickGate = Impulse.kr(tempo);
+          bassGate = Impulse.kr(tempo / 2); // Half-time bass
+          hihatGate = Impulse.kr(tempo * 2); // Double-time hihat
+          
+          // Kick drum (always present)
+          kick = EnvGen.kr(Env.perc(0.001, ${interpretation.energy * 0.3 + 0.1}), kickGate) * 
+                 SinOsc.ar(${interpretation.energy * 30 + 40} * EnvGen.kr(Env.perc(0.001, 0.08, 4, -4), kickGate));
+        `;
         
         // Add bass if included
         if (params.elements.includes('bass')) {
-          // Modify bass pattern based on darkness
-          const bassCode = patterns.hypnoticBass.replace(
-            "\\\\cutoff, Pseq([800, 400, 1200, 600], inf)",
-            `\\\\cutoff, Pseq([${params.basslineCutoff}, ${params.basslineCutoff * 0.5}, ${params.basslineCutoff * 1.5}, ${params.basslineCutoff * 0.75}], inf)`
-          );
-          composition += "\\n" + bassCode + ".play;\\n";
+          synthCode += `
+          // Bass line
+          bass = EnvGen.kr(Env.adsr(0.001, 0.1, 0.7, 0.2), bassGate) *
+                 LPF.ar(Saw.ar(${interpretation.energy * 20 + 40}), ${params.basslineCutoff});
+          `;
+        } else {
+          synthCode += `bass = 0;`;
         }
         
         // Add hihat if included
         if (params.elements.includes('hihat')) {
-          composition += "\\n" + patterns.minimalHihat + ".play;\\n";
+          synthCode += `
+          // Hi-hat
+          hihat = EnvGen.kr(Env.perc(0.001, ${0.1 - interpretation.darkness * 0.05}), hihatGate) *
+                  HPF.ar(WhiteNoise.ar(${interpretation.energy * 0.3 + 0.1}), 8000);
+          `;
+        } else {
+          synthCode += `hihat = 0;`;
         }
         
-        // Execute the composition
-        await scServer.interpret(composition);
+        synthCode += `
+          // Mix and output
+          mix = (kick + bass + hihat) * ${interpretation.energy * 0.5 + 0.3};
+          mix = mix.tanh; // Soft limiting
+          mix ! 2; // Stereo output
+        }`;
+        
+        // Create and play the synth
+        const synthDef = await scServer.synthDef(vibeName, synthCode);
+        const synthInstance = await scServer.synth(synthDef);
         
         return {
           content: [
@@ -100,9 +133,10 @@ export function registerVibeTools(server: any, scServer: any) {
           ]
         };
       } catch (error) {
+        console.error("[TECHNO] Vibe creation error:", error);
         return {
           content: [
-            { type: "text", text: `Error creating vibe: ${error}` }
+            { type: "text", text: `Error creating vibe: ${error instanceof Error ? error.message : JSON.stringify(error)}` }
           ]
         };
       }
@@ -116,17 +150,18 @@ export function registerVibeTools(server: any, scServer: any) {
     {},
     async () => {
       try {
-        await scServer.interpret("Pdef.clear;");
-        
+        // For now, we'll use a simple approach - this would need to be improved
+        // to track individual synths and stop them properly
         return {
           content: [
-            { type: "text", text: "All patterns stopped" }
+            { type: "text", text: "Note: Individual synth stopping not yet implemented" },
+            { type: "text", text: "Use techno-init to reset the environment" }
           ]
         };
       } catch (error) {
         return {
           content: [
-            { type: "text", text: `Error stopping patterns: ${error}` }
+            { type: "text", text: `Error stopping patterns: ${error instanceof Error ? error.message : JSON.stringify(error)}` }
           ]
         };
       }
@@ -144,19 +179,17 @@ export function registerVibeTools(server: any, scServer: any) {
     },
     async ({ element, param, value }: { element: "kick" | "bass" | "hihat"; param: string; value: number }) => {
       try {
-        // This is simplified - in reality we'd need more sophisticated pattern control
-        const code = `Pdef(\\\\${element}).set(\\\\${param}, ${value});`;
-        await scServer.interpret(code);
-        
+        // For now, parameter tweaking is not implemented with the new synth approach
         return {
           content: [
-            { type: "text", text: `Updated ${element}.${param} = ${value}` }
+            { type: "text", text: "Parameter tweaking not yet implemented with the new synth approach" },
+            { type: "text", text: `Would set ${element}.${param} = ${value}` }
           ]
         };
       } catch (error) {
         return {
           content: [
-            { type: "text", text: `Error tweaking parameter: ${error}` }
+            { type: "text", text: `Error tweaking parameter: ${error instanceof Error ? error.message : JSON.stringify(error)}` }
           ]
         };
       }
