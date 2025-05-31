@@ -54,3 +54,25 @@ Optionally, you can add it to a file called .vscode/mcp.json in your workspace. 
   }
 }
 ```
+## AI Assistant Configuration
+
+This project includes AI assistant configuration for enhanced development experience:
+
+- **Claude Code**: Deep code analysis and context documentation in `claude/` directory
+- **Cursor**: MDC rules in `.cursor/rules/` for active coding guidance
+- **GitHub Copilot**: Instructions in `.github/copilot-instructions.md` for inline assistance
+
+### For New Developers
+
+Run these commands to understand the AI setup:
+1. Review generated documentation: `ls claude/`
+2. Check Cursor rules: `ls .cursor/rules/`
+3. Read Copilot instructions: `cat .github/copilot-instructions.md`
+
+### Maintenance Commands
+
+- `/user:context-update` - Update context for new patterns (quarterly)
+- `/user:rules-sync` - Synchronize Cursor rules after context updates
+- `/user:instructions-optimize` - Optimize Copilot instructions annually
+
+See `.github/AI-SETUP-GUIDE.md` for detailed setup and maintenance instructions.

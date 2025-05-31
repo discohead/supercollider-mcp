@@ -1,0 +1,104 @@
+---
+description: "Universal naming, import, and organization patterns for SuperCollider MCP Server"
+---
+
+# Core Conventions
+
+## Naming Conventions
+
+### Variable and Function Naming
+Use camelCase with descriptive suffixes for clarity:
+✓ CORRECT:
+```typescript
+let scServerInstance: SCServer | null = null;
+let serverInitPromise: Promise<SCServer> | null = null;
+let activeSynths: any[] = [];  // Arrays use plural names
+```
+✗ WRONG:
+```typescript
+let server: SCServer | null = null;  // Too generic
+let init_promise: Promise<SCServer> | null = null;  // Snake case
+let synth: any[] = [];  // Singular name for array
+```
+
+### Async Function Naming
+Include verb prefixes that describe the action:
+✓ CORRECT: `async function initServer()`, `async function loadAndPlaySynth()`, `async function cleanupServer()`
+✗ WRONG: `async function server()`, `async function synth()`, `async function cleanup()`
+
+## Import Organization
+
+### Import Order and Style
+1. External imports first, with alias pattern for supercolliderjs
+2. MCP SDK imports with explicit .js extensions
+3. Internal imports with .js extensions
+
+✓ CORRECT:
+```typescript
+import supercolliderjs from "supercolliderjs";
+const sc = supercolliderjs;
+
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+import { someUtil } from "./utils.js";
+```
+✗ WRONG:
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp";  // Missing .js
+import { someUtil } from "./utils";  // Missing .js
+import supercolliderjs from "supercolliderjs";  // Wrong order
+```
+
+## State Management
+
+### Module-Level State Pattern
+Use module-level variables for singleton state:
+✓ CORRECT:
+```typescript
+let scServerInstance: SCServer | null = null;
+let serverInitPromise: Promise<SCServer> | null = null;
+let activeSynths: any[] = [];
+```
+✗ WRONG: `var scServer;` (no type/scope), `let synth: any[]` (singular name)
+
+## Output Format
+
+### Tool Response Structure
+Always use consistent content array format:
+✓ CORRECT:
+```typescript
+return {
+  content: [
+    {
+      type: "text",
+      text: "Label: value"
+    },
+    {
+      type: "text", 
+      text: "Another label: value"
+    }
+  ]
+};
+```
+✗ WRONG:
+```typescript
+return {
+  content: "Simple string"  // Not array
+};
+// or
+return {
+  text: "Label: value"  // Wrong structure
+};
+```
+
+## File Organization
+
+### Entry Point
+✓ CORRECT: Main file is `index.ts` (not `server.ts`)
+✗ WRONG: Using `server.ts`, `main.ts`, or `app.ts` as entry point
+
+### Test File Naming
+✓ CORRECT: `index.test.ts` (mirrors source with .test suffix)
+✗ WRONG: `test-index.ts`, `index.spec.ts`, `tests/index.ts`

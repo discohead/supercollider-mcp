@@ -1,0 +1,272 @@
+---
+description: "Server initialization, operation, and cleanup workflow patterns"
+glob: "**/index.ts"
+---
+
+# Server Lifecycle Workflows
+
+## Initialization Workflow
+
+### Complete Server Boot Sequence
+Follow this initialization pattern for every tool:
+✓ CORRECT:
+```typescript
+async function executeToolOperation(args) {
+  try {
+    // 1. Initialize server (singleton)
+    console.error("Initializing SuperCollider server...");
+    const scServer = await initServer();
+    
+    // 2. Perform operations
+    console.error("Executing operations...");
+    // ... tool-specific logic
+    
+    // 3. Wait if needed
+    await new Promise(resolve => setTimeout(resolve, duration));
+    
+    // 4. Return structured response
+    return {
+      content: [
+        { type: "text", text: "Operation complete" }
+      ]
+    };
+  } catch (error) {
+    // 5. Handle errors gracefully
+    console.error("Operation error:", error);
+    return {
+      content: [{
+        type: "text",
+        text: `An error occurred: ${error instanceof Error ? error.message : String(error)}`
+      }]
+    };
+  } finally {
+    // 6. Always cleanup
+    await cleanupServer();
+  }
+}
+```
+✗ WRONG:
+```typescript
+async function executeToolOperation(args) {
+  const server = await initServer();
+  // No error handling
+  // No cleanup
+  return result;
+}
+```
+
+## State Management Workflow
+
+### State Variables Lifecycle
+Manage state variables consistently:
+✓ CORRECT:
+```typescript
+// 1. Module-level declaration
+let scServerInstance: SCServer | null = null;
+let serverInitPromise: Promise<SCServer> | null = null;
+let activeSynths: any[] = [];
+
+// 2. Set during initialization
+serverInitPromise = (async () => {
+  const scServer = await sc.server.boot(config);
+  scServerInstance = scServer;  // Set instance
+  return scServer;
+})();
+
+// 3. Use during operation
+activeSynths.push(synth);  // Track resources
+
+// 4. Clear during cleanup
+scServerInstance = null;
+serverInitPromise = null;
+activeSynths = [];
+```
+✗ WRONG:
+```typescript
+// Partial state management
+let server = null;
+// No promise tracking
+// No resource tracking
+```
+
+## Error Recovery Workflow
+
+### Graceful Error Handling
+Handle errors at each stage:
+✓ CORRECT:
+```typescript
+// Initialization errors
+try {
+  const scServer = await sc.server.boot(config);
+} catch (err) {
+  console.error("SuperCollider server startup error:", err);
+  serverInitPromise = null;  // Reset promise
+  throw err;  // Re-throw for tool handler
+}
+
+// Execution errors
+try {
+  await loadAndPlaySynth(server, name, code);
+} catch (error) {
+  console.error(`Synth execution error for "${name}":`, error);
+  // Continue with cleanup
+}
+
+// Cleanup errors
+try {
+  await scServerInstance.quit();
+} catch (error) {
+  console.error("Server termination error:", error);
+  // Continue with force kill
+}
+```
+✗ WRONG:
+```typescript
+// Swallowing errors
+try {
+  await operation();
+} catch (e) {
+  // Silent failure
+}
+```
+
+## Cleanup Workflow
+
+### Complete Cleanup Sequence
+Always follow full cleanup steps:
+✓ CORRECT:
+```typescript
+async function cleanupServer() {
+  if (scServerInstance) {
+    try {
+      // 1. Log cleanup start
+      console.error("Terminating SuperCollider server...");
+      
+      // 2. Quit server gracefully
+      await scServerInstance.quit();
+      
+      // 3. Reset all state
+      scServerInstance = null;
+      serverInitPromise = null;
+      activeSynths = [];
+      
+      // 4. Log completion
+      console.error("SuperCollider server terminated");
+      
+      // 5. Force kill processes
+      try {
+        if (process.platform === 'win32') {
+          require('child_process').execSync('taskkill /F /IM sclang.exe', { stdio: 'ignore' });
+        } else {
+          require('child_process').execSync('pkill -f sclang', { stdio: 'ignore' });
+        }
+      } catch (killErr) {
+        console.error('Attempting to terminate sclang process:', killErr);
+      }
+    } catch (error) {
+      console.error("Server termination error:", error);
+    }
+  }
+}
+```
+✗ WRONG:
+```typescript
+// Incomplete cleanup
+function cleanup() {
+  scServerInstance = null;  // No quit, no process kill
+}
+```
+
+## Tool Execution Workflow
+
+### Standard Tool Pattern
+Every tool should follow this workflow:
+✓ CORRECT:
+```typescript
+server.tool(
+  "tool-name",
+  "Description",
+  schema,
+  async (args) => {
+    try {
+      // 1. Initialize
+      const scServer = await initServer();
+      
+      // 2. Validate/prepare
+      console.error(`Processing ${args.length} items...`);
+      
+      // 3. Execute
+      await performOperations(scServer, args);
+      
+      // 4. Wait if needed
+      await new Promise(resolve => setTimeout(resolve, duration));
+      
+      // 5. Format response
+      return {
+        content: [
+          { type: "text", text: "Result summary" },
+          { type: "text", text: "Additional details" }
+        ]
+      };
+    } catch (error) {
+      // 6. Error response
+      console.error("Tool error:", error);
+      return {
+        content: [{
+          type: "text",
+          text: `An error occurred: ${formatError(error)}`
+        }]
+      };
+    } finally {
+      // 7. Cleanup
+      await cleanupServer();
+    }
+  }
+);
+```
+
+## Concurrent Operations Workflow
+
+### Handle Multiple Operations
+For multi-synth or batch operations:
+✓ CORRECT:
+```typescript
+// 1. Map operations to promises
+const operations = items.map(item => 
+  performOperation(server, item)
+);
+
+// 2. Execute concurrently
+console.error(`Executing ${operations.length} operations...`);
+await Promise.all(operations);
+
+// 3. Aggregate results
+const summary = items.map(i => i.name).join(", ");
+```
+✗ WRONG:
+```typescript
+// Sequential execution
+for (const item of items) {
+  await performOperation(server, item);
+}
+```
+
+## Logging Workflow
+
+### Consistent Logging Pattern
+Log at key workflow points:
+✓ CORRECT:
+```typescript
+console.error("Starting SuperCollider server...");
+console.error("SuperCollider server started successfully");
+console.error(`Loading synth: ${synthName}`);
+console.error(`Playing synth: ${synthName}`);
+console.error(`Waiting for ${duration}ms...`);
+console.error("Terminating SuperCollider server...");
+console.error("SuperCollider server terminated");
+```
+✗ WRONG:
+```typescript
+console.log("Starting...");  // Wrong method
+// or no logging at key points
+```

@@ -1,0 +1,177 @@
+---
+description: "System boundaries, separation of concerns, and architectural patterns"
+---
+
+# Architecture Principles
+
+## Singleton Server Management
+
+### Server Instance Pattern
+Maintain single SuperCollider server instance with proper lifecycle:
+✓ CORRECT:
+```typescript
+let scServerInstance: SCServer | null = null;
+let serverInitPromise: Promise<SCServer> | null = null;
+
+async function initServer(): Promise<SCServer> {
+  // Return existing promise to prevent race conditions
+  if (serverInitPromise) {
+    return serverInitPromise;
+  }
+  
+  serverInitPromise = (async () => {
+    const scServer = await sc.server.boot();
+    scServerInstance = scServer;
+    return scServer;
+  })();
+  
+  return serverInitPromise!;
+}
+```
+✗ WRONG:
+```typescript
+// Creates multiple servers
+async function initServer() {
+  return await sc.server.boot();
+}
+// or no promise caching
+async function initServer() {
+  if (scServerInstance) return scServerInstance;
+  // Race condition if called concurrently
+}
+```
+
+## Resource Lifecycle
+
+### Cleanup After Operations
+Always perform full cleanup after each tool execution:
+✓ CORRECT:
+```typescript
+try {
+  const server = await initServer();
+  // ... perform operations
+} finally {
+  await cleanupServer();
+}
+
+async function cleanupServer() {
+  if (scServerInstance) {
+    try {
+      await scServerInstance.quit();
+      scServerInstance = null;
+      serverInitPromise = null;
+      activeSynths = [];
+      // Platform-specific process cleanup
+    } catch (error) {
+      console.error("Server termination error:", error);
+    }
+  }
+}
+```
+✗ WRONG:
+```typescript
+// No cleanup
+const server = await initServer();
+// ... perform operations
+// Server left running
+
+// or partial cleanup
+scServerInstance = null;  // Without quitting server
+```
+
+## Error Boundaries
+
+### Tool Error Handling Pattern
+Always catch and format errors as MCP responses:
+✓ CORRECT:
+```typescript
+async ({ synth, duration = 5000 }) => {
+  try {
+    const scServer = await initServer();
+    // ... operations
+    return {
+      content: [
+        { type: "text", text: "Success message" }
+      ]
+    };
+  } catch (error) {
+    console.error("SuperCollider execution error:", error);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `An error occurred: ${error instanceof Error ? error.message : JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`
+        }
+      ]
+    };
+  } finally {
+    await cleanupServer();
+  }
+}
+```
+✗ WRONG:
+```typescript
+// Throwing errors instead of returning
+async ({ synth }) => {
+  const scServer = await initServer();
+  throw new Error("Something failed");  // Don't throw
+}
+// or no cleanup on error
+catch (error) {
+  return { error: error.message };  // Wrong format
+}
+```
+
+## Process Boundaries
+
+### Platform-Specific Operations
+Handle platform differences explicitly:
+✓ CORRECT: Check `process.platform === 'win32'` and use appropriate kill command
+✗ WRONG: Assuming Unix only with `pkill -f sclang`
+
+## Separation of Concerns
+
+### Single Responsibility
+Each function should have one clear purpose:
+✓ CORRECT:
+- `initServer()` - Only initializes server
+- `loadAndPlaySynth()` - Only loads and plays one synth
+- `cleanupServer()` - Only handles cleanup
+
+✗ WRONG:
+```typescript
+// Mixed responsibilities
+async function initAndPlay(synth) {
+  const server = await sc.server.boot();
+  await server.synthDef(synth.name, synth.code);
+  // Mixing init with execution
+}
+```
+
+## Stateless Operation Model
+
+### No Persistent State Between Tool Calls
+Each tool execution should be independent:
+✓ CORRECT:
+```typescript
+// Full lifecycle in each tool
+async (args) => {
+  try {
+    const server = await initServer();
+    // perform operation
+    return result;
+  } finally {
+    await cleanupServer();  // Always cleanup
+  }
+}
+```
+✗ WRONG:
+```typescript
+// Leaving state between calls
+async (args) => {
+  const server = await initServer();
+  // perform operation
+  return result;
+  // No cleanup - server stays running
+}
+```

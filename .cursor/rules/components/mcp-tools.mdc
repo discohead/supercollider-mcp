@@ -1,0 +1,195 @@
+---
+description: "Rules for MCP tool definitions in SuperCollider server"
+glob: "**/index.ts"
+---
+
+# MCP Tool Definition Rules
+
+## Tool Naming Convention
+
+### Kebab-Case with Verb-Noun Pattern
+Tools must use kebab-case with descriptive verb-noun pattern:
+✓ CORRECT: `"synth-execute"`, `"multi-synth-execute"`, `"server-status"`
+✗ WRONG: `"synthExecute"`, `"execute_synth"`, `"runSynth"`, `"play"`
+
+## Tool Structure Pattern
+
+### Complete Tool Definition
+Follow this exact pattern for all tools:
+✓ CORRECT:
+```typescript
+server.tool(
+  "tool-name",
+  `Multi-line description explaining what the tool does.
+  Include usage details and any important notes.`,
+  {
+    // Zod schema with descriptions
+    param1: z.string().describe("What this parameter is for"),
+    param2: z.number().optional().describe("Optional param with default. Default is X")
+  },
+  async ({ param1, param2 = defaultValue }) => {
+    try {
+      const scServer = await initServer();
+      // Tool implementation
+      return {
+        content: [
+          { type: "text", text: "Result line 1" },
+          { type: "text", text: "Result line 2" }
+        ]
+      };
+    } catch (error) {
+      console.error("Tool execution error:", error);
+      return {
+        content: [{
+          type: "text",
+          text: `An error occurred: ${error instanceof Error ? error.message : JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`
+        }]
+      };
+    } finally {
+      await cleanupServer();
+    }
+  }
+);
+```
+✗ WRONG:
+```typescript
+// Missing descriptions
+server.tool("tool", "desc", { param: z.string() }, async (args) => {
+  // No try-catch-finally
+  const server = await initServer();
+  return { content: "result" };  // Wrong format
+});
+```
+
+## Parameter Schema Patterns
+
+### Nested Object Schemas
+Use nested objects with full descriptions:
+✓ CORRECT:
+```typescript
+{
+  synth: z.object({
+    name: z.string().describe("Synth name"),
+    code: z.string().describe("Synth code")
+  }).describe("Synth information to play"),
+  duration: z.number().optional().describe("Playback duration in milliseconds. Default is 5000 (5 seconds)")
+}
+```
+✗ WRONG:
+```typescript
+{
+  synthName: z.string(),  // Flat structure, no description
+  synthCode: z.string(),
+  duration: z.number()    // No optional or default documented
+}
+```
+
+### Array Parameters
+For multiple items, use array schemas:
+✓ CORRECT:
+```typescript
+{
+  synths: z.array(z.object({
+    name: z.string().describe("Synth name"),
+    code: z.string().describe("SuperCollider code")
+  })).describe("Array of synths to execute")
+}
+```
+✗ WRONG:
+```typescript
+{
+  synths: z.array(z.any())  // No structure
+}
+```
+
+## Response Format Patterns
+
+### Structured Text Output
+Always return content array with text blocks:
+✓ CORRECT:
+```typescript
+// Single synth response
+return {
+  content: [
+    { type: "text", text: "Synth name: test-synth" },
+    { type: "text", text: `Code: ${synthCode}` },
+    { type: "text", text: "Playback duration: 5 seconds" }
+  ]
+};
+
+// Multi-synth response
+return {
+  content: [
+    { type: "text", text: "Number of synths: 2" },
+    { type: "text", text: "Synth names: sine-wave, noise-gen" }
+  ]
+};
+```
+✗ WRONG:
+```typescript
+return { 
+  result: "Success",  // Wrong structure
+  synth: synthName 
+};
+// or
+return {
+  content: "Synth executed"  // Not array
+};
+```
+
+## Tool Handler Patterns
+
+### Async Handler Structure
+All handlers must follow async pattern with cleanup:
+✓ CORRECT:
+```typescript
+async ({ param1, param2 = 5000 }) => {
+  try {
+    const scServer = await initServer();
+    
+    // Main logic here
+    await doOperation(scServer, param1);
+    
+    // Wait if needed
+    await new Promise(resolve => setTimeout(resolve, param2));
+    
+    return {
+      content: [/* results */]
+    };
+  } catch (error) {
+    console.error("Execution error:", error);
+    return {
+      content: [{
+        type: "text",
+        text: `An error occurred: ${/* error formatting */}`
+      }]
+    };
+  } finally {
+    await cleanupServer();
+  }
+}
+```
+✗ WRONG:
+```typescript
+async (args) => {
+  const server = await initServer();
+  // No error handling
+  // No cleanup
+  return { content: [...] };
+}
+```
+
+## Default Values
+
+### Document Defaults in Descriptions
+Always specify default values in parameter descriptions:
+✓ CORRECT:
+```typescript
+duration: z.number().optional().describe("Duration in milliseconds. Default is 5000 (5 seconds)")
+```
+✗ WRONG:
+```typescript
+duration: z.number().optional()  // No default mentioned
+// or
+duration: z.number().default(5000).describe("Duration")  // Use optional with manual default instead
+```

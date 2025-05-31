@@ -1,0 +1,225 @@
+---
+description: "SuperCollider server management and integration patterns"
+glob: "**/index.ts"
+---
+
+# SuperCollider Integration Rules
+
+## Server Initialization
+
+### Singleton Server Pattern
+Always use the singleton initialization pattern:
+✓ CORRECT:
+```typescript
+async function initServer(): Promise<SCServer> {
+  // Check for existing promise first
+  if (serverInitPromise) {
+    console.error("Returning existing server initialization promise");
+    return serverInitPromise;
+  }
+
+  serverInitPromise = (async () => {
+    try {
+      console.error("Starting SuperCollider server...");
+      const scServer = await sc.server.boot({
+        debug: false,
+        echo: false,
+        stdin: false,
+        stderr: false,
+        serverErrorLogPath: './supercollider-error.log'
+      });
+      
+      scServerInstance = scServer;
+      console.error("SuperCollider server started successfully");
+      return scServer;
+    } catch (err) {
+      console.error("SuperCollider server startup error:", err);
+      serverInitPromise = null;
+      throw err;
+    }
+  })();
+
+  return serverInitPromise!;
+}
+```
+✗ WRONG:
+```typescript
+async function initServer() {
+  // No promise caching - race conditions
+  if (scServerInstance) return scServerInstance;
+  
+  const server = await sc.server.boot();  // No config
+  return server;
+}
+```
+
+## Server Configuration
+
+### Boot Configuration Options
+Always configure server with these options:
+✓ CORRECT:
+```typescript
+await sc.server.boot({
+  debug: false,      // No debug output
+  echo: false,       // No echo output
+  stdin: false,      // No stdin
+  stderr: false,     // Redirect stderr
+  serverErrorLogPath: './supercollider-error.log'
+});
+```
+✗ WRONG:
+```typescript
+await sc.server.boot();  // Default config with debug output
+// or
+await sc.server.boot({ debug: true });  // Debug enabled
+```
+
+## Synth Execution Pattern
+
+### SynthDef Loading and Playing
+Use proper async synth execution:
+✓ CORRECT:
+```typescript
+async function loadAndPlaySynth(
+  scServer: SCServer, 
+  synthName: string, 
+  synthCode: string
+): Promise<void> {
+  console.error(`Loading synth: ${synthName}`);
+  const def = await scServer.synthDef(synthName, synthCode);
+  
+  console.error(`Playing synth: ${synthName}`);
+  const synth = await scServer.synth(def);
+  
+  activeSynths.push(synth);
+}
+```
+✗ WRONG:
+```typescript
+// Not awaiting async operations
+function loadAndPlaySynth(server, name, code) {
+  const def = server.synthDef(name, code);  // No await
+  server.synth(def);  // No await
+}
+```
+
+## Multiple Synth Execution
+
+### Concurrent Synth Pattern
+Execute multiple synths in parallel:
+✓ CORRECT:
+```typescript
+const synthPromises = synths.map(synthInfo => 
+  loadAndPlaySynth(scServer, synthInfo.name, synthInfo.code)
+);
+await Promise.all(synthPromises);
+```
+✗ WRONG:
+```typescript
+// Sequential execution
+for (const synth of synths) {
+  await loadAndPlaySynth(scServer, synth.name, synth.code);
+}
+// Slower and not concurrent
+```
+
+## Server Cleanup
+
+### Comprehensive Cleanup Function
+Always implement full cleanup:
+✓ CORRECT:
+```typescript
+async function cleanupServer() {
+  if (scServerInstance) {
+    try {
+      console.error("Terminating SuperCollider server...");
+      await scServerInstance.quit();
+      
+      scServerInstance = null;
+      serverInitPromise = null;
+      activeSynths = [];
+      
+      console.error("SuperCollider server terminated");
+      
+      // Force kill processes
+      try {
+        if (process.platform === 'win32') {
+          require('child_process').execSync('taskkill /F /IM sclang.exe', { stdio: 'ignore' });
+        } else {
+          require('child_process').execSync('pkill -f sclang', { stdio: 'ignore' });
+        }
+      } catch (killErr) {
+        console.error('Attempting to terminate sclang process:', killErr);
+      }
+    } catch (error) {
+      console.error("Server termination error:", error);
+    }
+  }
+}
+```
+✗ WRONG:
+```typescript
+function cleanupServer() {
+  scServerInstance?.quit();  // No await, no state reset
+}
+```
+
+## Error Logging
+
+### SuperCollider Error Handling
+Always log SC-specific errors with context:
+✓ CORRECT:
+```typescript
+console.error("Starting SuperCollider server...");
+console.error("SuperCollider server startup error:", err);
+console.error(`Loading synth: ${synthName}`);
+console.error("SuperCollider execution error:", error);
+```
+✗ WRONG:
+```typescript
+console.log("Server error");  // Wrong method
+// or
+throw error;  // Don't throw, return formatted response
+```
+
+## State Management
+
+### Track Active Synths
+Maintain array of active synths:
+✓ CORRECT:
+```typescript
+let activeSynths: any[] = [];
+
+// When creating synth
+const synth = await scServer.synth(def);
+activeSynths.push(synth);
+
+// Clear on cleanup
+activeSynths = [];
+```
+✗ WRONG:
+```typescript
+// Not tracking synths
+await scServer.synth(def);
+// No way to manage or cleanup
+```
+
+## Platform Compatibility
+
+### Cross-Platform Process Management
+Handle both Windows and Unix systems:
+✓ CORRECT:
+```typescript
+if (process.platform === 'win32') {
+  require('child_process').execSync('taskkill /F /IM sclang.exe', { stdio: 'ignore' });
+} else {
+  require('child_process').execSync('pkill -f sclang', { stdio: 'ignore' });
+}
+```
+✗ WRONG:
+```typescript
+// Unix only
+require('child_process').execSync('pkill -f sclang');
+// or Windows only
+require('child_process').execSync('taskkill /F /IM sclang.exe');
+```

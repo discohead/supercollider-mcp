@@ -1,0 +1,169 @@
+---
+description: "Error handling, logging, and code quality standards"
+---
+
+# Code Quality Standards
+
+## Error Logging
+
+### Console.error for Server Logs
+Use console.error for server-side logging (not sent to MCP clients):
+✓ CORRECT:
+```typescript
+console.error("Starting SuperCollider server...");
+console.error("SuperCollider server startup error:", err);
+console.error("Attempting to terminate sclang process:", killErr);
+```
+✗ WRONG:
+```typescript
+console.log("Starting server...");  // Wrong method
+process.stdout.write("Error: " + err);  // Not standard pattern
+```
+
+## Error Response Formatting
+
+### Comprehensive Error Details
+Format errors with proper type checking and detail extraction:
+✓ CORRECT:
+```typescript
+catch (error) {
+  console.error("Context description:", error);
+  return {
+    content: [
+      {
+        type: "text",
+        text: `An error occurred: ${
+          error instanceof Error 
+            ? error.message 
+            : JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
+        }`
+      }
+    ]
+  };
+}
+```
+✗ WRONG:
+```typescript
+catch (error) {
+  return {
+    content: [{ type: "text", text: "Error: " + error }]  // Poor formatting
+  };
+}
+// or
+catch (error) {
+  throw error;  // Don't re-throw in tools
+}
+```
+
+## Promise Patterns
+
+### Timeout Implementation
+Use Promise with setTimeout for delays:
+✓ CORRECT:
+```typescript
+await new Promise(resolve => setTimeout(resolve, duration));
+```
+✗ WRONG:
+```typescript
+setTimeout(() => {}, duration);  // Not awaitable
+// or
+await delay(duration);  // Unless delay is defined
+```
+
+### Promise Caching
+Cache initialization promises to prevent race conditions:
+✓ CORRECT:
+```typescript
+if (serverInitPromise) {
+  return serverInitPromise;  // Return existing promise
+}
+serverInitPromise = (async () => {
+  // initialization logic
+})();
+return serverInitPromise!;
+```
+✗ WRONG:
+```typescript
+if (scServerInstance) {
+  return scServerInstance;  // Returns instance not promise
+}
+// No protection against concurrent calls
+```
+
+## Type Safety
+
+### Interface Definitions
+Define interfaces for external libraries without TypeScript types:
+✓ CORRECT: Define `interface SCServer` with method signatures
+✗ WRONG: Using `any` everywhere or assuming types exist in untyped libraries
+
+## Resource Management
+
+### Cleanup Patterns
+Always reset all state during cleanup:
+✓ CORRECT: `await scServerInstance.quit()`, reset all state variables, force kill processes
+✗ WRONG: No await on quit, partial state reset, no process cleanup
+
+## Code Documentation
+
+### Tool Descriptions
+Use multi-line descriptions with clear usage instructions:
+✓ CORRECT:
+```typescript
+server.tool(
+  "synth-execute",
+  `Executes a SuperCollider synth.
+  The synth will play for the specified duration.`,
+  schema,
+  handler
+);
+```
+✗ WRONG:
+```typescript
+server.tool("synth-execute", "Runs synth", schema, handler);  // Too brief
+```
+
+### Parameter Descriptions
+Always include .describe() on Zod schema fields:
+✓ CORRECT:
+```typescript
+{
+  name: z.string().describe("Synth name"),
+  duration: z.number().optional().describe("Playback duration in milliseconds. Default is 5000 (5 seconds)")
+}
+```
+✗ WRONG:
+```typescript
+{
+  name: z.string(),  // No description
+  duration: z.number().optional()  // No default documented
+}
+```
+
+## Async Best Practices
+
+### Error Handling in Async Functions
+Always use try-catch-finally in async tool handlers:
+✓ CORRECT:
+```typescript
+async (args) => {
+  try {
+    // main logic
+    return { content: [...] };
+  } catch (error) {
+    // error handling
+    return { content: [...] };
+  } finally {
+    // cleanup
+    await cleanupServer();
+  }
+}
+```
+✗ WRONG:
+```typescript
+async (args) => {
+  // No error handling
+  const server = await initServer();
+  return { content: [...] };
+}
+```

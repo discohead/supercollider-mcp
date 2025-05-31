@@ -1,0 +1,236 @@
+---
+description: "Testing patterns and structure for SuperCollider MCP server"
+glob: "**/*.test.ts"
+---
+
+# Test Structure Rules
+
+## Test File Organization
+
+### Standard Test Imports
+Always use this import pattern:
+✓ CORRECT:
+```typescript
+import { describe, it, expect } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { server } from "./index.js";
+```
+✗ WRONG:
+```typescript
+import { test, assert } from "vitest";  // Use it/expect
+import { Client } from "@modelcontextprotocol/sdk/client";  // Missing .js
+```
+
+## Test Structure Pattern
+
+### In-Memory Client-Server Setup
+Every test must follow this pattern:
+✓ CORRECT:
+```typescript
+describe("tool-name", () => {
+  it("should describe expected behavior", async () => {
+    // 1. Create client
+    const client = new Client({
+      name: "test client",
+      version: "0.1.0",
+    });
+
+    // 2. Create transport pair
+    const [clientTransport, serverTransport] = 
+      InMemoryTransport.createLinkedPair();
+    
+    // 3. Connect in parallel
+    await Promise.all([
+      client.connect(clientTransport),
+      server.connect(serverTransport),
+    ]);
+
+    // 4. Call tool
+    const result = await client.callTool({
+      name: "tool-name",
+      arguments: { /* args */ }
+    });
+
+    // 5. Assert exact structure
+    expect(result).toEqual({
+      content: [/* expected content */]
+    });
+  });
+});
+```
+✗ WRONG:
+```typescript
+it("test", async () => {
+  // Direct server call without MCP protocol
+  const result = await server.callTool(...);
+});
+```
+
+## Test Naming Conventions
+
+### Descriptive Test Names
+Use behavior-focused descriptions:
+✓ CORRECT:
+- `"Check if sine wave is output"`
+- `"should handle missing optional parameters"`
+- `"should execute multiple synths concurrently"`
+
+✗ WRONG:
+- `"test1"`
+- `"synth test"`
+- `"it works"`
+
+## Test Data Patterns
+
+### Synth Test Data
+Use consistent, simple synth definitions:
+✓ CORRECT:
+```typescript
+// Sine wave test
+{
+  name: "test-synth",
+  code: `{
+    arg freq = 440;
+    var sig = SinOsc.ar(freq);
+    Out.ar(0, sig);
+}`
+}
+
+// Noise test
+{
+  name: "noise-synth", 
+  code: `{
+    var sig = WhiteNoise.ar;
+    Out.ar(0, sig);
+}`
+}
+```
+✗ WRONG:
+```typescript
+{
+  name: "s1",  // Unclear name
+  code: "SinOsc.ar(440)"  // Invalid synth syntax
+}
+```
+
+## Assertion Patterns
+
+### Exact Output Matching
+Match the complete response structure:
+✓ CORRECT:
+```typescript
+expect(result).toEqual({
+  content: [
+    {
+      type: "text",
+      text: "Synth name: test-synth",
+    },
+    {
+      type: "text",
+      text: `Code: {
+    arg freq = 440;
+    var sig = SinOsc.ar(freq);
+    Out.ar(0, sig);
+}`,  // Exact whitespace
+    },
+    {
+      type: "text",
+      text: "Playback duration: 0.5 seconds",
+    },
+  ],
+});
+```
+✗ WRONG:
+```typescript
+expect(result.content[0].text).toContain("test-synth");  // Partial matching
+// or
+expect(result).toBeTruthy();  // Too loose
+```
+
+## Test Duration Patterns
+
+### Use Short Durations
+Keep tests fast with short durations:
+✓ CORRECT:
+```typescript
+arguments: {
+  synth: { name: "test", code: "..." },
+  duration: 500  // 0.5 seconds
+}
+```
+✗ WRONG:
+```typescript
+duration: 5000  // Default 5 seconds - too slow for tests
+// or
+duration: 10  // Too short to be meaningful
+```
+
+## Edge Case Testing
+
+### Test Optional Parameters
+Verify default behavior:
+✓ CORRECT:
+```typescript
+it("should use default duration when not specified", async () => {
+  const result = await client.callTool({
+    name: "synth-execute",
+    arguments: {
+      synth: { name: "test", code: "{...}" }
+      // duration omitted
+    }
+  });
+  
+  expect(result.content[2].text).toBe("Playback duration: 5 seconds");
+});
+```
+
+### Test Error Cases
+Include error handling tests:
+✓ CORRECT:
+```typescript
+it("should handle empty synth array gracefully", async () => {
+  const result = await client.callTool({
+    name: "multi-synth-execute",
+    arguments: { synths: [] }
+  });
+  
+  expect(result.content[0].text).toBe("Number of synths: 0");
+});
+```
+
+## Test Isolation
+
+### No Shared State
+Each test must be completely independent:
+✓ CORRECT:
+```typescript
+describe("synth-execute", () => {
+  it("test 1", async () => {
+    const client = new Client({...});  // New client
+    // ... test
+  });
+  
+  it("test 2", async () => {
+    const client = new Client({...});  // New client
+    // ... test
+  });
+});
+```
+✗ WRONG:
+```typescript
+const client = new Client({...});  // Shared client
+
+describe("tests", () => {
+  it("test 1", async () => {
+    // Uses shared client
+  });
+});
+```
+
+## What NOT to Test
+
+### Avoid Testing Implementation Details
+Focus on MCP protocol behavior, not SuperCollider:
+✓ CORRECT: Test that tool accepts parameters and returns expected format
+✗ WRONG: Test actual audio output or SuperCollider process management

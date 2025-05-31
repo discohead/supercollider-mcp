@@ -1,0 +1,232 @@
+---
+description: "Synth code execution patterns and best practices"
+glob: "**/index.ts"
+---
+
+# Synth Execution Rules
+
+## Synth Code Format
+
+### Valid SuperCollider Synth Structure
+Synth code must be valid SuperCollider function blocks:
+✓ CORRECT:
+```typescript
+const synthCode = `{
+    arg freq = 440;
+    var sig = SinOsc.ar(freq);
+    Out.ar(0, sig);
+}`;
+
+// Or with parameters
+const synthCode = `{
+    arg freq = 440, amp = 0.5;
+    var sig = SinOsc.ar(freq) * amp;
+    Out.ar(0, sig);
+}`;
+```
+✗ WRONG:
+```typescript
+// Not a function block
+const synthCode = "SinOsc.ar(440)";
+
+// Missing Out.ar
+const synthCode = `{
+    var sig = SinOsc.ar(440);
+}`;
+```
+
+## Synth Naming
+
+### Descriptive Synth Names
+Use clear, descriptive names:
+✓ CORRECT:
+- `"sine-wave"`
+- `"white-noise"`
+- `"fm-synth"`
+- `"bass-drum"`
+
+✗ WRONG:
+- `"s1"`
+- `"synth"`
+- `"test"`
+- `"untitled"`
+
+## Duration Handling
+
+### Promise-Based Duration Control
+Use setTimeout with Promise for duration:
+✓ CORRECT:
+```typescript
+// Default duration handling
+async ({ synth, duration = 5000 }) => {
+  try {
+    const scServer = await initServer();
+    
+    // Load and play synth
+    await loadAndPlaySynth(scServer, synth.name, synth.code);
+    
+    // Wait for duration
+    console.error(`Waiting for ${duration}ms...`);
+    await new Promise(resolve => setTimeout(resolve, duration));
+    
+    return {
+      content: [
+        { type: "text", text: `Playback duration: ${duration / 1000} seconds` }
+      ]
+    };
+  } finally {
+    await cleanupServer();
+  }
+}
+```
+✗ WRONG:
+```typescript
+// No wait
+await loadAndPlaySynth(server, name, code);
+return result;  // Returns immediately
+
+// or blocking wait
+while (Date.now() < startTime + duration) { }  // CPU blocking
+```
+
+## Multi-Synth Execution
+
+### Parallel Synth Loading
+Execute multiple synths concurrently:
+✓ CORRECT:
+```typescript
+// Map to promises
+const synthPromises = synths.map(synthInfo => 
+  loadAndPlaySynth(scServer, synthInfo.name, synthInfo.code)
+);
+
+// Wait for all
+console.error(`Loading ${synths.length} synths...`);
+await Promise.all(synthPromises);
+
+// Format response
+const synthNames = synths.map(s => s.name).join(", ");
+return {
+  content: [
+    { type: "text", text: `Number of synths: ${synths.length}` },
+    { type: "text", text: `Synth names: ${synthNames}` }
+  ]
+};
+```
+✗ WRONG:
+```typescript
+// Sequential loading
+for (const synth of synths) {
+  await loadAndPlaySynth(server, synth.name, synth.code);
+}
+// or no error handling for individual synths
+```
+
+## Synth Parameter Validation
+
+### Zod Schema for Synth Objects
+Define clear schemas for synth parameters:
+✓ CORRECT:
+```typescript
+synth: z.object({
+  name: z.string().describe("Synth name"),
+  code: z.string().describe("SuperCollider synth code")
+}).describe("Synth information to play")
+
+// For arrays
+synths: z.array(z.object({
+  name: z.string().describe("Synth name"),
+  code: z.string().describe("SuperCollider code for the synth")
+})).describe("Array of synths to execute")
+```
+✗ WRONG:
+```typescript
+synth: z.any()  // No structure
+// or separate fields
+synthName: z.string(),
+synthCode: z.string()  // Should be object
+```
+
+## Response Formatting
+
+### Synth Execution Response
+Format responses consistently:
+✓ CORRECT:
+```typescript
+// Single synth
+return {
+  content: [
+    { type: "text", text: `Synth name: ${synth.name}` },
+    { type: "text", text: `Code: ${synth.code}` },  // Preserve formatting
+    { type: "text", text: `Playback duration: ${duration / 1000} seconds` }
+  ]
+};
+
+// Multiple synths
+return {
+  content: [
+    { type: "text", text: `Number of synths: ${synths.length}` },
+    { type: "text", text: `Synth names: ${synthNames}` }
+  ]
+};
+```
+✗ WRONG:
+```typescript
+return {
+  content: [{
+    type: "text",
+    text: `Executed ${synth.name}`  // Too minimal
+  }]
+};
+```
+
+## Fire-and-Forget Pattern
+
+### No Active Synth Control
+Synths run for duration without control:
+✓ CORRECT:
+```typescript
+// Start synth
+const synth = await scServer.synth(def);
+activeSynths.push(synth);
+
+// Wait for duration
+await new Promise(resolve => setTimeout(resolve, duration));
+
+// Cleanup terminates all
+await cleanupServer();
+```
+✗ WRONG:
+```typescript
+// Trying to control individual synths
+const synth = await scServer.synth(def);
+setTimeout(() => synth.stop(), duration);  // No stop method
+```
+
+## Error Context
+
+### Provide Execution Context in Errors
+Include synth info in error messages:
+✓ CORRECT:
+```typescript
+catch (error) {
+  console.error(`SuperCollider execution error for synth "${synth.name}":`, error);
+  return {
+    content: [{
+      type: "text",
+      text: `An error occurred executing synth "${synth.name}": ${error.message}`
+    }]
+  };
+}
+```
+✗ WRONG:
+```typescript
+catch (error) {
+  return {
+    content: [{
+      type: "text",
+      text: "Execution failed"  // No context
+    }]
+  };
+}
+```
