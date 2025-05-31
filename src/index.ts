@@ -116,6 +116,17 @@ export const server = new McpServer({
   version: "0.1.0",
 });
 
+// Add initialization logging - but don't override the default handler
+process.on('uncaughtException', (error) => {
+  console.error("[MCP] Uncaught exception:", error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error("[MCP] Unhandled rejection at:", promise, "reason:", reason);
+  process.exit(1);
+});
+
 
 server.tool(
   "synth-execute",
@@ -238,7 +249,27 @@ server.tool(
   }
 );
 
-// Register vibe tools for techno composition
+// Check if SuperCollider is available before starting
+try {
+  execSync('which sclang', { stdio: 'ignore' });
+  console.error("[MCP] SuperCollider found in PATH");
+} catch {
+  // Try macOS app location
+  try {
+    execSync('ls "/Applications/SuperCollider.app/Contents/MacOS/sclang"', { stdio: 'ignore' });
+    console.error("[MCP] SuperCollider found in /Applications");
+    console.error("[MCP] Note: Consider adding SuperCollider to PATH for better performance");
+  } catch {
+    console.error("[MCP] WARNING: SuperCollider not found");
+    console.error("[MCP] Please install SuperCollider from: https://supercollider.github.io/downloads");
+    console.error("[MCP] Some features may not work without SuperCollider");
+  }
+}
+
+const transport = new StdioServerTransport();
+
+// Register vibe tools for techno composition after server setup
+console.error("[MCP] Registering vibe tools...");
 registerVibeTools(server, {
   synthDef: async (name: string, code: string) => {
     const scServer = await initServer();
@@ -249,29 +280,8 @@ registerVibeTools(server, {
     return scServer.interpret(code);
   }
 });
+console.error("[MCP] Vibe tools registered");
 
-// Check if SuperCollider is available before starting
-let scFound = false;
-
-try {
-  execSync('which sclang', { stdio: 'ignore' });
-  console.error("[MCP] SuperCollider found in PATH");
-  scFound = true;
-} catch {
-  // Try macOS app location
-  try {
-    execSync('ls "/Applications/SuperCollider.app/Contents/MacOS/sclang"', { stdio: 'ignore' });
-    console.error("[MCP] SuperCollider found in /Applications");
-    console.error("[MCP] Note: Consider adding SuperCollider to PATH for better performance");
-    scFound = true;
-  } catch {
-    console.error("[MCP] WARNING: SuperCollider not found");
-    console.error("[MCP] Please install SuperCollider from: https://supercollider.github.io/downloads");
-    console.error("[MCP] Some features may not work without SuperCollider");
-  }
-}
-
-const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error("[MCP] Techno Vibe MCP Server running on stdio");
 
